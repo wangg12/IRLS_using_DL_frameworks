@@ -183,7 +183,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
     test_acc  = sess.run(acc, feed_dict=test_feed_dict)
     print('\t train acc: {}, test acc: {}'.format(train_acc, test_acc))
 
-    L2_norm_w = np.linalg.norm(sess.run(w_old))
+    L2_norm_w = np.linalg.norm(sess.run(w))
     print('\t L2 norm of w: {}'.format(L2_norm_w))
 
     if i>0:
@@ -192,7 +192,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
       if diff_w < 1e-2:
         break
 
-    w_old = w
+    # w_old = w
     w_new = sess.run(optimize_op, feed_dict=train_feed_dict)
     # w = update_weight(w, X, y)
     i += 1
