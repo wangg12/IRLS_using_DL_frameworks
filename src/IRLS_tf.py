@@ -41,8 +41,6 @@ N_test = X_test.shape[0]
 X_train = np.hstack((np.ones((N_train, 1)), X_train.toarray()))
 X_test = np.hstack((np.ones((N_test, 1)), X_test.toarray()))
 
-# X_train = csr_matrix(X_train, dtype=dtype)
-# X_test = csr_matrix(X_test, dtype=dtype)
 
 y_train = y_train.reshape((N_train,1))
 y_test = y_test.reshape((N_test,1))
@@ -50,8 +48,6 @@ y_test = y_test.reshape((N_test,1))
 # label: -1, +1 ==> 0, 1
 y_train = np.where(y_train==-1, 0, 1)
 y_test = np.where(y_test==-1, 0, 1)
-# y_train = csr_matrix(y_train, dtype=dtype)
-# y_test = csr_matrix(y_test, dtype=dtype)
 
 # NB: here X's shape is (N,d), which differs to the derivation
 
@@ -73,7 +69,6 @@ def neg_log_likelihood(w, X, y, L2_param=None):
   y: Nx1
   L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
   '''
-  # print(np.max(np.dot(X, w)), np.max(w))
   res = tf.matmul(tf.matmul(tf.transpose(w), tf.transpose(X)), y) - tf.reduce_sum(tf.log(1 + tf.exp(tf.matmul(X, w))))
   if L2_param != None and L2_param > 0:
     res += -0.5*L2_param*tf.matmul(tf.transpose(w), w)
@@ -86,12 +81,7 @@ def prob(X,w):
   w: dx1
   ---
   prob: N x num_classes(2)'''
-  # N,d = X.shape.as_list()
-  # y = tf.zeros_like(X, dtype=tf.float32)
-
-  # y[:, 1].assign(1.)
   y = tf.constant(np.array([0., 1.]), dtype=tf.float32)
-  # print(np.dot(X, w).shape, w.shape)
   prob = tf.exp(tf.matmul(X, w) * y)/(1+tf.exp(tf.matmul(X, w)))
   return prob
 
@@ -157,14 +147,25 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
 
   w = tf.Variable(0.01*tf.ones((d,1), dtype=tf.float32), name='w')
   w_update = update(w, X, y, L2_param)
+  with tf.variable_scope('neg_L'):
+    neg_L = neg_log_likelihood(w, X, y, L2_param)
+  neg_L_summ = tf.summary.scalar('neg_L', neg_L)
 
-  neg_L = neg_log_likelihood(w, X, y, L2_param)
-  acc = compute_acc(X, y, w)
+  with tf.variable_scope('accuracy'):
+    acc = compute_acc(X, y, w)
+  acc_summ = tf.summary.scalar('acc', acc)
 
   optimize_op = optimize(w, w_update)
 
-  sess = tf.Session()
+  merged_all = tf.summary.merge_all()
+
+  config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False) 
+  config.gpu_options.allow_growth = True
+  config.gpu_options.per_process_gpu_memory_fraction = 0.8
+
+  sess = tf.Session(config=config)
   sess.run(tf.global_variables_initializer())
+  summary_writer = tf.summary.FileWriter('./log', sess.graph)
 
   train_feed_dict = {X:X_train, y:y_train}
   test_feed_dict = {X:X_test, y:y_test}
@@ -179,7 +180,9 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
 
     print('\t neg log likelihood: {}'.format(sess.run(neg_L, feed_dict=train_feed_dict)))
 
-    train_acc = sess.run(acc, feed_dict=train_feed_dict)
+    train_acc, merged = sess.run([acc, merged_all], feed_dict=train_feed_dict)
+    summary_writer.add_summary(merged, i)
+
     test_acc  = sess.run(acc, feed_dict=test_feed_dict)
     print('\t train acc: {}, test acc: {}'.format(train_acc, test_acc))
 
@@ -192,9 +195,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
       if diff_w < 1e-2:
         break
 
-    # w_old = w
     w_new = sess.run(optimize_op, feed_dict=train_feed_dict)
-    # w = update_weight(w, X, y)
     i += 1
   print('training done.')
 
