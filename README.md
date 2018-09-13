@@ -7,7 +7,7 @@ implemented using tensorflow and pytorch.
 * We show that both tensorflow and pytorch can do general matrix based algorithms, and 
 both can be accelerated by the power of gpu.
 
-* In this implementation, we use svd to solve peudo inverse of singular matrices.
+* In this implementation, we use svd to solve pseudo inverse of singular matrices.
 The svd in torch is somehow less numerically stable than that in tensorflow, so we
 use a slight regularization in the valina IRLS in pytorch.
 
