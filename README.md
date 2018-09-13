@@ -9,5 +9,5 @@ both can be accelerated by the power of gpu.
 
 * In this implementation, we use svd to solve pseudo inverse of singular matrices.
 The svd in torch is somehow less numerically stable than that in tensorflow, so we
-use a slight regularization in the valina IRLS in pytorch.
+use a slight regularization in the vanilla IRLS in pytorch.
 
