@@ -143,17 +143,15 @@ def update_weight(w_old, X, y, L2_param=0):
         L2_reg_term = L2_reg_term.cuda()
     XRX = torch.mm(X.t(), R_flat.expand_as(X) * X) + L2_reg_term  # dxd
 
-    U, S, V = torch.svd(XRX)  # perhaps this is less stable than tensorflow
-    # U, S, V = np.linalg.svd(XRX.cpu().numpy())
-    # U = torch.from_numpy(U).cuda()
-    # S = torch.from_numpy(S).cuda()
-    # V = torch.from_numpy(V).cuda()
-    S = S.unsqueeze(1)  # dx1
+    # U, S, V = torch.svd(XRX)  # perhaps this is less stable than tensorflow
+    # S = S.unsqueeze(1)  # dx1
 
     # calculate pseudo inverse via SVD
     # not good, will produce inf when divide by 0
-    S_pinv = torch.where(S != 0, 1/S, torch.zeros_like(S))
-    XRX_pinv = V.mm(S_pinv.expand_as(U.t()) * U.t())
+    # S_pinv = torch.where(S != 0, 1/S, torch.zeros_like(S))
+    # XRX_pinv = V.mm(S_pinv.expand_as(U.t()) * U.t())
+
+    XRX_pinv = torch.pinverse(XRX)
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
     w_update = torch.mm(XRX_pinv, torch.mm(X.t(), mu - y) + L2_param * w_old)
