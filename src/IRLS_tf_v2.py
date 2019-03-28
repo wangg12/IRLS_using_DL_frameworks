@@ -6,6 +6,7 @@ import os
 import argparse
 import random
 import numpy as np
+import datetime
 
 # from numpy import linalg
 import os.path as osp
@@ -143,12 +144,12 @@ def train_IRLS(
   """
     N, d = X_train.shape
     w = tf.Variable(0.01 * tf.ones((d, 1), dtype=tf.float32), name="w")
-    summary_writer = tf.summary.create_file_writer("./log")
+    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary_writer = tf.summary.create_file_writer(f"./logs/{current_time}")
     print("start training...")
     print("L2 param(lambda): {}".format(L2_param))
     i = 0
     # iteration
-    # w_old = w
     while i <= max_iter:
         print("iter: {}".format(i))
 
@@ -158,7 +159,7 @@ def train_IRLS(
         train_acc = compute_acc(X_train, y_train, w)
         with summary_writer.as_default():
             tf.summary.scalar("train_acc", train_acc, step=i)
-            tf.summary.scalar("train_neg_L", train_acc, step=i)
+            tf.summary.scalar("train_neg_L", neg_L, step=i)
 
         test_acc = compute_acc(X_test, y_test, w)
         with summary_writer.as_default():
