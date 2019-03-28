@@ -167,6 +167,7 @@ def update_weight(w_old, X, y, L2_param=0):
     if use_cuda:
         L2_reg_term = L2_reg_term.cuda()
     XRX = torch.mm(X.t(), R_flat.expand_as(X) * X) + L2_reg_term  # dxd
+    np.save('XRX_pytorch.npy', XRX.cpu().numpy())
 
     # method 1: calculate pseudo inverse via SVD
     # not good, will produce inf when divide by 0
