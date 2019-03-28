@@ -26,9 +26,10 @@ path_train = "../a9a/a9a"
 path_test = "../a9a/a9a.t"
 MAX_ITER = 100
 np_dtype = np.float32
-use_cuda = False
+
+device = torch.device('cpu')
 if torch.cuda.is_available():
-    use_cuda = True
+    device = torch.device('cuda')
 
 
 # manual seed
@@ -48,8 +49,8 @@ X_test, y_test = load_svmlight_file(path_test, n_features=123, dtype=np_dtype)
 # stack a dimension of ones to X to simplify computation
 N_train = X_train.shape[0]
 N_test = X_test.shape[0]
-X_train = np.hstack((np.ones((N_train, 1)), X_train.toarray()))
-X_test = np.hstack((np.ones((N_test, 1)), X_test.toarray()))
+X_train = np.hstack((np.ones((N_train, 1), dtype=np_dtype), X_train.toarray()))
+X_test = np.hstack((np.ones((N_test, 1), dtype=np_dtype), X_test.toarray()))
 
 # X_train = csr_matrix(X_train, dtype=dtype)
 # X_test = csr_matrix(X_test, dtype=dtype)
@@ -65,16 +66,6 @@ y_test = np.float32(np.where(y_test == -1, 0, 1))
 # NB: here X's shape is (N,d), which differs to the derivation
 
 
-# def sigmoid(v, a=1):
-#   '''
-#   1./(1+exp(-a*v))
-#   v: input, can be a ndarray, in this case, sigmoid is applied element-wise
-#   '''
-#   res = np.zeros(v.shape, dtype=dtype)
-#   res = np.where(a*v>=0, 1./(1+np.exp(-a*v)), np.exp(a*v)/(1 + np.exp(a*v)))
-#   return res #1./(1+np.exp(-a*v))
-
-
 def neg_log_likelihood(w, X, y, L2_param=None):
     """
   w: dx1
@@ -82,11 +73,10 @@ def neg_log_likelihood(w, X, y, L2_param=None):
   y: Nx1
   L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
   """
-    res = torch.mm(torch.mm(w.data.t(), X.t()), y) - torch.sum(
-        torch.log(1 + torch.exp(torch.mm(X, w.data)))
-    )
+    Xw = X.mm(w)
+    res = torch.mm(Xw.t(), y) - torch.log(1 + Xw.exp()).sum()
     if L2_param != None and L2_param > 0:
-        res += -0.5 * L2_param * torch.mm(w.data.t(), w.data)
+        res += -0.5 * L2_param * torch.mm(w.t(), w)
     return -res
 
 
@@ -96,34 +86,16 @@ def prob(X, w):
   w: dx1
   ---
   prob: N x num_classes(2)"""
-
-    y = torch.FloatTensor(np.array([[0.0, 1.0]]))  # 1x2
-    if use_cuda:
-        y = y.cuda()
-    Xw = X.mm(w.data)  # Nx1
-
-    prob = torch.exp(Xw.expand(Xw.size()[0], 2) * y.expand(Xw.size()[0], 2)) / (
-        1 + torch.exp(X.mm(w.data))
-    ).expand(Xw.size()[0], 2)
-    return prob
+    Xw = X.mm(w)
+    y = torch.tensor([[0.0, 1.0]], device=device)  # 1x2
+    return (Xw * y).exp() / (1 + Xw.exp())  # Nx2
 
 
 def compute_acc(X, y, w):
     p = prob(X, w)
-    _, y_pred = torch.max(p, 1)
-    y_pred = y_pred.type_as(torch.FloatTensor())
-    if use_cuda:
-        y_pred = y_pred.cuda()
-    acc = torch.mean((y == y_pred).type_as(y_pred))
-    return acc
+    y_pred = torch.argmax(p, 1).to(y)
+    return (y.flatten() == y_pred).float().mean()
 
-
-# def pinv(A):
-#     """
-#     Return the pseudoinverse of A using the QR decomposition.
-#     """
-#     Q, R = torch.qr(A)
-#     return R.pinverse().mm(Q.t())
 
 def pinv(A):
     """
@@ -155,35 +127,31 @@ def update_weight(w_old, X, y, L2_param=0):
   ---
   w_new: dx1
   """
-    d = X.size()[1]
-    mu = torch.sigmoid(X.mm(w_old))  # Nx1
+    mu = X.mm(w_old).sigmoid()  # Nx1
 
     R_flat = mu * (1 - mu)  # element-wise, Nx1
 
-    if L2_param == 0:
-        # don't know why need this to work, this is less numerically stable than tensorflow
-        L2_param = 1e-2
-    L2_reg_term = L2_param * torch.eye(d)
-    if use_cuda:
-        L2_reg_term = L2_reg_term.cuda()
-    XRX = torch.mm(X.t(), R_flat.expand_as(X) * X) + L2_reg_term  # dxd
+    XRX = torch.mm(X.t(), R_flat.expand_as(X) * X)  # dxd
+    if L2_param > 0:
+        XRX.diagonal().add_(L2_param)
+
     np.save('XRX_pytorch.npy', XRX.cpu().numpy())
 
-    # method 1: calculate pseudo inverse via SVD
-    # not good, will produce inf when divide by 0
-    # U, S, V = torch.svd(XRX)  # perhaps this is less stable than tensorflow
-    # S = S.unsqueeze(1)  # dx1
-    # S_pinv = torch.where(S != 0, 1/S, torch.zeros_like(S))
-    # XRX_pinv = V.mm(S_pinv.expand_as(U.t()) * U.t())
-
-    # method 2
-    XRX_pinv = torch.pinverse(XRX)
-
-    # method 3
-    # XRX_pinv = pinv(XRX)
+    # Calculate pseudo inverse via SVD
+    # For singular matrices, we only invert the non-zero singular values.
+    # not really stable, pytorch/numpy style pinverse, which invert the singular
+    # values above certain threshold (computed with the max singular value)
+    # should improve this. But this is here to match tf.
+    U, S, V = torch.svd(XRX, some=False)
+    S_pinv = torch.where(S != 0, 1/S, torch.zeros_like(S))
+    XRX_pinv = torch.chain_matmul(V, S_pinv.diag(), U.t())
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
-    w_update = torch.mm(XRX_pinv, torch.mm(X.t(), mu - y) + L2_param * w_old)
+    val = torch.mm(X.t(), mu - y)
+    if L2_param > 0:
+        val += L2_param * w_old
+
+    w_update = torch.mm(XRX_pinv, val)
     w_new = w_old - w_update
     return w_new
 
@@ -198,23 +166,15 @@ def train_IRLS(
 
   """
     N, d = X_train.shape
-    X_train = torch.FloatTensor(X_train)
-    X_test = torch.FloatTensor(X_test)
-    y_train = torch.FloatTensor(y_train)
-    y_test = torch.FloatTensor(y_test)
+    X_train = torch.as_tensor(X_train, device=device)
+    X_test = torch.as_tensor(X_test, device=device)
+    y_train = torch.as_tensor(y_train, device=device)
+    y_test = torch.as_tensor(y_test, device=device)
 
-    if use_cuda:
-        X_train = X_train.cuda()
-        X_test = X_test.cuda()
-        y_train = y_train.cuda()
-        y_test = y_test.cuda()
-
-    w = torch.Tensor(0.01 * torch.ones((d, 1)))
-    # w.requires_grad = False
-    if use_cuda:
-        w = w.cuda()
+    w = torch.full((d, 1), 0.01, device=device)
 
     print("start training...")
+    print("Device: {}".format(device))
     print("L2 param(lambda): {}".format(L2_param))
     i = 0
     # iteration
@@ -237,7 +197,7 @@ def train_IRLS(
             if diff_w < 1e-2:
                 break
 
-        w_old_data = w.data
+        w_old_data = w.clone()
         w = update_weight(w, X_train, y_train, L2_param)
         i += 1
     print("training done.")
@@ -245,7 +205,6 @@ def train_IRLS(
 
 if __name__ == "__main__":
     lambda_ = 20  # 0
-    # don't know why pytorch only achieves about 0.66 test acc
     train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=100)
 
     # from sklearn.linear_model import LogisticRegression
