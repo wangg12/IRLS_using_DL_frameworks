@@ -215,7 +215,7 @@ def train_IRLS(
 
 
 if __name__ == "__main__":
-    lambda_ = 0  # 0
+    lambda_ = 20  # 0
     # don't know why pytorch only achieves about 0.66 test acc
     train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=100)
 
