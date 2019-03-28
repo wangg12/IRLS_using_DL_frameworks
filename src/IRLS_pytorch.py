@@ -118,6 +118,31 @@ def compute_acc(X, y, w):
     return acc
 
 
+# def pinv(A):
+#     """
+#     Return the pseudoinverse of A using the QR decomposition.
+#     """
+#     Q, R = torch.qr(A)
+#     return R.pinverse().mm(Q.t())
+
+def pinv(A):
+    """
+    https://discuss.pytorch.org/t/torch-pinverse-seems-to-be-inaccurate/33616
+    Return the pseudoinverse of A,
+    without invoking the SVD in torch.pinverse().
+
+    Could also use (but doesn't avoid the SVD):
+        R.pinverse().matmul(Q.t())
+    """
+    rows,cols = A.size()
+    if rows >= cols:
+        Q,R = torch.qr(A)
+        return R.inverse().mm(Q.t())
+    else:
+        Q,R = torch.qr(A.t())
+        return R.inverse().mm(Q.t()).t()
+
+
 def update_weight(w_old, X, y, L2_param=0):
     """
   w_new = w_old - w_update
@@ -143,15 +168,18 @@ def update_weight(w_old, X, y, L2_param=0):
         L2_reg_term = L2_reg_term.cuda()
     XRX = torch.mm(X.t(), R_flat.expand_as(X) * X) + L2_reg_term  # dxd
 
+    # method 1: calculate pseudo inverse via SVD
+    # not good, will produce inf when divide by 0
     # U, S, V = torch.svd(XRX)  # perhaps this is less stable than tensorflow
     # S = S.unsqueeze(1)  # dx1
-
-    # calculate pseudo inverse via SVD
-    # not good, will produce inf when divide by 0
     # S_pinv = torch.where(S != 0, 1/S, torch.zeros_like(S))
     # XRX_pinv = V.mm(S_pinv.expand_as(U.t()) * U.t())
 
+    # method 2
     XRX_pinv = torch.pinverse(XRX)
+
+    # method 3
+    # XRX_pinv = pinv(XRX)
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
     w_update = torch.mm(XRX_pinv, torch.mm(X.t(), mu - y) + L2_param * w_old)
@@ -199,12 +227,12 @@ def train_IRLS(
         test_acc = compute_acc(X_test, y_test, w)
         print("\t train acc: {}, test acc: {}".format(train_acc, test_acc))
 
-        L2_norm_w = torch.norm(w).data.sum()
-        print("\t L2 norm of w: {}".format(L2_norm_w))
+        L2_norm_w = torch.norm(w)
+        print("\t L2 norm of w: {}".format(L2_norm_w.item()))
 
         if i > 0:
-            diff_w = torch.norm(w.data - w_old_data)
-            print("\t diff of w_old and w: {}".format(diff_w))
+            diff_w = torch.norm(w - w_old_data)
+            print("\t diff of w_old and w: {}".format(diff_w.item()))
             if diff_w < 1e-2:
                 break
 
