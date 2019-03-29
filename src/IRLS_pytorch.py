@@ -135,10 +135,8 @@ def update_weight(w_old, X, y, L2_param=0):
     # np.save('XRX_pytorch.npy', XRX.cpu().numpy())
 
     # Method 1: Calculate pseudo inverse via SVD
-    # For singular matrices, we only invert the non-zero singular values.
-    # not really stable, pytorch/numpy style pinverse, which invert the singular
+    # For singular matrices, we invert the singular
     # values above certain threshold (computed with the max singular value)
-    # should improve this. But this is here to match tf.
     # this is slightly better than torch.pinverse when L2_param=0
     XRX_pinv = pinv_naive(XRX)
 
