@@ -10,9 +10,9 @@ import datetime
 
 # from numpy import linalg
 import os.path as osp
-
+import sys
 cur_dir = osp.dirname(osp.abspath(__file__))
-
+sys.path.insert(1, osp.join(cur_dir, '.'))
 from sklearn.datasets import load_svmlight_file
 from scipy.sparse import csr_matrix
 
@@ -22,6 +22,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from tf_utils import pinv_naive, pinv
+
 
 path_train = osp.join(cur_dir, "../a9a/a9a")
 path_test = osp.join(cur_dir, "../a9a/a9a.t")
@@ -61,11 +63,11 @@ y_test = np.where(y_test == -1, 0, 1)
 
 def neg_log_likelihood(w, X, y, L2_param=None):
     """
-      w: dx1
-      X: Nxd
-      y: Nx1
-      L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
-      """
+    w: dx1
+    X: Nxd
+    y: Nx1
+    L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
+    """
     # print(type(X), X.dtype)
     res = tf.matmul(tf.matmul(tf.transpose(w), tf.transpose(X)), y.astype(np_dtype)) - \
             tf.reduce_sum(tf.math.log(1 + tf.exp(tf.matmul(X, w))))
@@ -76,10 +78,10 @@ def neg_log_likelihood(w, X, y, L2_param=None):
 
 def prob(X, w):
     """
-  X: Nxd
-  w: dx1
-  ---
-  prob: N x num_classes(2)"""
+    X: Nxd
+    w: dx1
+    ---
+    prob: N x num_classes(2)"""
     y = tf.constant(np.array([0.0, 1.0]), dtype=tf.float32)
     prob = tf.exp(tf.matmul(X, w) * y) / (1 + tf.exp(tf.matmul(X, w)))
     return prob
@@ -114,14 +116,13 @@ def update(w_old, X, y, L2_param=0):
     XRX = tf.matmul(tf.transpose(X), R_flat * X) + L2_reg_term  # dxd
     # np.save('XRX_tf.npy', XRX.numpy())
 
-    S, U, V = tf.linalg.svd(XRX, full_matrices=True, compute_uv=True)
-    # np.save("svd_tf.npy", {"S": S.numpy(), "U": U.numpy(), "V": V.numpy()})
-    S = tf.expand_dims(S, 1)
-
     # calculate pseudo inverse via SVD
-    # not good, will produce inf when divide by 0
-    S_pinv = tf.where(tf.not_equal(S, 0), 1 / S, tf.zeros_like(S))
-    XRX_pinv = tf.matmul(V, S_pinv * tf.transpose(U))
+    # method 1
+    # slightly better than tfp.math.pinv when L2_param=0
+    XRX_pinv = pinv_naive(XRX)
+
+    # method 2
+    # XRX_pinv = pinv(XRX)
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
     # w_new = tf.assign(w_old, w_old - tf.matmul(tf.matmul(XRX_pinv, tf.transpose(X)), mu - y))
@@ -135,15 +136,12 @@ def optimize(w_old, w_update):
     return w_old.assign(w_old - w_update)
 
 
-def train_IRLS(
-    X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER
-):
+def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER):
     """train Logistic Regression via IRLS algorithm
-  X: Nxd
-  y: Nx1
-  ---
-
-  """
+    X: Nxd
+    y: Nx1
+    ---
+    """
     N, d = X_train.shape
     w = tf.Variable(0.01 * tf.ones((d, 1), dtype=tf.float32), name="w")
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

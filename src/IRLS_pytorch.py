@@ -97,36 +97,33 @@ def compute_acc(X, y, w):
     return (y.flatten() == y_pred).float().mean()
 
 
-def pinv(A):
-    """
-    https://discuss.pytorch.org/t/torch-pinverse-seems-to-be-inaccurate/33616
-    Return the pseudoinverse of A,
-    without invoking the SVD in torch.pinverse().
-
-    Could also use (but doesn't avoid the SVD):
-        R.pinverse().matmul(Q.t())
-    """
-    rows,cols = A.size()
-    if rows >= cols:
-        Q,R = torch.qr(A)
-        return R.inverse().mm(Q.t())
-    else:
-        Q,R = torch.qr(A.t())
-        return R.inverse().mm(Q.t()).t()
+def pinv_naive(A):
+    device = A.device
+    dtype = A.dtype
+    U, S, V = torch.svd(A, some=False)
+    threshold = torch.max(S) * 1e-5
+    # S_pinv = torch.where(S > threshold, 1/S, torch.zeros_like(S))
+    S_mask = S[S > threshold]
+    S_pinv = torch.cat([1.0 / S_mask,
+                        torch.full([S.numel() - S_mask.numel()], 0.,
+                                   device=device, dtype=dtype)],
+                        0)
+    A_pinv = torch.chain_matmul(V, S_pinv.diag(), U.t())
+    return A_pinv
 
 
 def update_weight(w_old, X, y, L2_param=0):
     """
-  w_new = w_old - w_update
-  w_update = (X'RX+lambda*I)^(-1) (X'(mu-y) + lambda*w_old)
-  lambda is L2_param
+    w_new = w_old - w_update
+    w_update = (X'RX+lambda*I)^(-1) (X'(mu-y) + lambda*w_old)
+    lambda is L2_param
 
-  w_old: dx1
-  X: Nxd
-  y: Nx1
-  ---
-  w_new: dx1
-  """
+    w_old: dx1
+    X: Nxd
+    y: Nx1
+    ---
+    w_new: dx1
+    """
     mu = X.mm(w_old).sigmoid()  # Nx1
 
     R_flat = mu * (1 - mu)  # element-wise, Nx1
@@ -142,14 +139,10 @@ def update_weight(w_old, X, y, L2_param=0):
     # not really stable, pytorch/numpy style pinverse, which invert the singular
     # values above certain threshold (computed with the max singular value)
     # should improve this. But this is here to match tf.
-    U, S, V = torch.svd(XRX, some=False)
-    S_pinv = torch.where(S != 0, 1/S, torch.zeros_like(S))
-    XRX_pinv = torch.chain_matmul(V, S_pinv.diag(), U.t())
+    # this is slightly better than torch.pinverse when L2_param=0
+    XRX_pinv = pinv_naive(XRX)
 
     # method 2
-    # XRX_pinv = pinv(XRX)
-
-    # method 3
     # XRX_pinv = torch.pinverse(XRX)
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
