@@ -112,10 +112,10 @@ def update(w_old, X, y, L2_param=0):
 
     L2_reg_term = L2_param * tf.eye(d)
     XRX = tf.matmul(tf.transpose(X), R_flat * X) + L2_reg_term  # dxd
-    np.save('XRX_tf.npy', XRX.numpy())
+    # np.save('XRX_tf.npy', XRX.numpy())
 
     S, U, V = tf.linalg.svd(XRX, full_matrices=True, compute_uv=True)
-    np.save("svd_tf.npy", {"S": S.numpy(), "U": U.numpy(), "V": V.numpy()})
+    # np.save("svd_tf.npy", {"S": S.numpy(), "U": U.numpy(), "V": V.numpy()})
     S = tf.expand_dims(S, 1)
 
     # calculate pseudo inverse via SVD

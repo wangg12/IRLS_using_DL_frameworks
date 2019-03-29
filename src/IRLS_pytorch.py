@@ -135,9 +135,9 @@ def update_weight(w_old, X, y, L2_param=0):
     if L2_param > 0:
         XRX.diagonal().add_(L2_param)
 
-    np.save('XRX_pytorch.npy', XRX.cpu().numpy())
+    # np.save('XRX_pytorch.npy', XRX.cpu().numpy())
 
-    # Calculate pseudo inverse via SVD
+    # Method 1: Calculate pseudo inverse via SVD
     # For singular matrices, we only invert the non-zero singular values.
     # not really stable, pytorch/numpy style pinverse, which invert the singular
     # values above certain threshold (computed with the max singular value)
@@ -145,6 +145,12 @@ def update_weight(w_old, X, y, L2_param=0):
     U, S, V = torch.svd(XRX, some=False)
     S_pinv = torch.where(S != 0, 1/S, torch.zeros_like(S))
     XRX_pinv = torch.chain_matmul(V, S_pinv.diag(), U.t())
+
+    # method 2
+    # XRX_pinv = pinv(XRX)
+
+    # method 3
+    # XRX_pinv = torch.pinverse(XRX)
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
     val = torch.mm(X.t(), mu - y)
