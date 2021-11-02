@@ -1,36 +1,28 @@
 # python 3
 from __future__ import print_function, division, absolute_import
-
 import os.path as osp
-import argparse
 import random
 import numpy as np
+from loguru import logger
 
 # from numpy import linalg
-import torch
-import torch.backends.cudnn as cudnn
-
-cudnn.benchmark = True
+import megengine as mge
+import megengine.functional as F
 
 from sklearn.datasets import load_svmlight_file
-from scipy.sparse import csr_matrix
 
-# from scipy.sparse import linalg
-import matplotlib
+mge.core.set_option("async_level", 0)
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-cur_dir = osp.dirname(osp.abspath(__file__))
+cur_dir = osp.abspath(osp.dirname(__file__))
 path_train = osp.join(cur_dir, "../a9a/a9a")
 path_test = osp.join(cur_dir, "../a9a/a9a.t")
 MAX_ITER = 100
 np_dtype = np.float32
 
-device = torch.device("cpu")
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-
+if mge.is_cuda_available():
+    device = "gpu0:0"
+else:
+    device = "cpu0:0"
 
 # manual seed
 manualSeed = random.randint(1, 10000)  # fix seed
@@ -73,10 +65,10 @@ def neg_log_likelihood(w, X, y, L2_param=None):
     y: Nx1
     L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
     """
-    Xw = X.mm(w)
-    res = torch.mm(Xw.t(), y) - torch.log(1 + Xw.exp()).sum()
-    if L2_param != None and L2_param > 0:
-        res += -0.5 * L2_param * torch.mm(w.t(), w)
+    Xw = X @ w
+    res = Xw.transpose() @ y - F.log(1 + F.exp(Xw)).sum()
+    if L2_param is not None and L2_param > 0:
+        res += -0.5 * L2_param * (w.transpose() @ w)
     return -res
 
 
@@ -86,39 +78,40 @@ def prob(X, w):
     w: dx1
     ---
     prob: N x num_classes(2)"""
-    Xw = X.mm(w)
-    y = torch.tensor([[0.0, 1.0]], device=device)  # 1x2
-    return (Xw * y).exp() / (1 + Xw.exp())  # Nx2
+    Xw = X @ w
+    y = mge.tensor([[0.0, 1.0]])  # 1x2
+    return F.exp(Xw * y) / (1 + F.exp(Xw))  # Nx2
 
 
 def compute_acc(X, y, w):
     p = prob(X, w)
-    y_pred = torch.argmax(p, 1).to(y)
-    return (y.flatten() == y_pred).float().mean()
+    y_pred = F.argmax(p, 1).to(y.device).astype(y.dtype)
+    return (y.flatten() == y_pred).astype("float32").mean()
+
+
+def get_mat_diag(X):
+    n = X.shape[0]
+    mask = F.eye(n).astype("bool")
+    return F.cond_take(mask, X)[0]
+
+
+def vec_to_diag_mat(v):
+    n = np.prod(v.shape)
+    D = v.flatten() * F.eye(n, dtype=v.dtype)
+    return D
 
 
 def pinv_naive(A):
     device = A.device
     dtype = A.dtype
-    # U, S, V = torch.svd(A, some=False)
-    U, S, Vh = torch.linalg.svd(A, full_matrices=True)
-    threshold = torch.max(S) * 1e-5
-    # S_pinv = torch.where(S > threshold, 1/S, torch.zeros_like(S))
+    U, S, Vh = F.svd(A, full_matrices=True)
+    threshold = F.max(S) * 1e-5
     S_mask = S[S > threshold]
-    S_pinv = torch.cat([1.0 / S_mask, torch.full([S.numel() - S_mask.numel()], 0.0, device=device, dtype=dtype)], 0)
-    # A_pinv = V @ S_pinv.diag() @ U.t()
-    A_pinv = Vh.t() @ S_pinv.diag() @ U.t()
+    S_pinv = F.concat(
+        [1.0 / S_mask, F.full([np.prod(S.shape) - np.prod(S_mask.shape)], 0.0, device=device, dtype=dtype)], 0
+    )
+    A_pinv = Vh.transpose() @ vec_to_diag_mat(S_pinv) @ U.transpose()
     return A_pinv
-
-
-def test_pinv():
-    A = np.random.uniform(size=(10, 10)).astype("float32")
-    A_th = torch.tensor(A)
-    A_pinv = np.linalg.pinv(A)
-    A_th_pinv = pinv_naive(A_th).numpy()
-    diff = A_pinv - A_th_pinv
-    print(f"diff:\n {diff}")
-    print(f"diff min: {diff.min()} max: {diff.max()} mean: {diff.mean()}")
 
 
 def update_weight(w_old, X, y, L2_param=0):
@@ -133,13 +126,13 @@ def update_weight(w_old, X, y, L2_param=0):
     ---
     w_new: dx1
     """
-    mu = X.mm(w_old).sigmoid()  # Nx1
+    mu = F.sigmoid(X @ w_old)  # Nx1
 
     R_flat = mu * (1 - mu)  # element-wise, Nx1
 
-    XRX = torch.mm(X.t(), R_flat.expand_as(X) * X)  # dxd
+    XRX = X.transpose() @ (F.broadcast_to(R_flat, X.shape) * X)  # dxd
     if L2_param > 0:
-        XRX.diagonal().add_(L2_param)
+        XRX += L2_param * F.eye(XRX.shape[0])
 
     # np.save('XRX_pytorch.npy', XRX.cpu().numpy())
 
@@ -153,15 +146,16 @@ def update_weight(w_old, X, y, L2_param=0):
     # XRX_pinv = torch.pinverse(XRX)
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
-    val = torch.mm(X.t(), mu - y)
+    val = X.transpose() @ (mu - y)
     if L2_param > 0:
         val += L2_param * w_old
 
-    w_update = torch.mm(XRX_pinv, val)
+    w_update = XRX_pinv @ val
     w_new = w_old - w_update
     return w_new
 
 
+@logger.catch
 def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER):
     """train Logistic Regression via IRLS algorithm
     X: Nxd
@@ -170,12 +164,12 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
 
     """
     N, d = X_train.shape
-    X_train = torch.as_tensor(X_train, device=device)
-    X_test = torch.as_tensor(X_test, device=device)
-    y_train = torch.as_tensor(y_train, device=device)
-    y_test = torch.as_tensor(y_test, device=device)
+    X_train = mge.tensor(X_train)
+    X_test = mge.tensor(X_test)
+    y_train = mge.tensor(y_train)
+    y_test = mge.tensor(y_test)
 
-    w = torch.full((d, 1), 0.01, device=device)
+    w = F.full((d, 1), 0.01)
 
     print("start training...")
     print("Device: {}".format(device))
@@ -192,24 +186,22 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
         test_acc = compute_acc(X_test, y_test, w)
         print("\t train acc: {}, test acc: {}".format(train_acc, test_acc))
 
-        L2_norm_w = torch.norm(w)
+        L2_norm_w = F.norm(w.flatten())
         print("\t L2 norm of w: {}".format(L2_norm_w.item()))
 
         if i > 0:
-            diff_w = torch.norm(w - w_old_data)
+            diff_w = F.norm((w - w_old_data).flatten())
             print("\t diff of w_old and w: {}".format(diff_w.item()))
             if diff_w < 1e-2:
                 break
 
-        w_old_data = w.clone()
+        w_old_data = F.copy(w)
         w = update_weight(w, X_train, y_train, L2_param)
         i += 1
     print("training done.")
 
 
 if __name__ == "__main__":
-    # test_pinv()
-
     lambda_ = 20  # 0
     train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=100)
 

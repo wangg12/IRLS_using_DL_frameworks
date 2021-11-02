@@ -6,20 +6,13 @@ def _maybe_validate_matrix(a, validate_args):
     """Checks that input is a `float` matrix."""
     assertions = []
     if not a.dtype.is_floating:
-        raise TypeError(
-            "Input `a` must have `float`-like `dtype` " "(saw {}).".format(a.dtype.name)
-        )
+        raise TypeError("Input `a` must have `float`-like `dtype` " "(saw {}).".format(a.dtype.name))
     if a.shape.ndims is not None:
         if a.shape.ndims < 2:
-            raise ValueError(
-                "Input `a` must have at least 2 dimensions "
-                "(saw: {}).".format(a.shape.ndims)
-            )
+            raise ValueError("Input `a` must have at least 2 dimensions " "(saw: {}).".format(a.shape.ndims))
     elif validate_args:
         assertions.append(
-            tf.compat.v1.assert_rank_at_least(
-                a, rank=2, message="Input `a` must have at least 2 dimensions."
-            )
+            tf.compat.v1.assert_rank_at_least(a, rank=2, message="Input `a` must have at least 2 dimensions.")
         )
     return assertions
 
@@ -40,9 +33,7 @@ def pinv_naive(a):
 
     threshold = tf.reduce_max(s) * 1e-5
     s_mask = tf.boolean_mask(s, s > threshold)  # s[s>threshold]
-    s_inv = tf.linalg.diag(
-        tf.concat([1.0 / s_mask, tf.zeros([tf.size(s) - tf.size(s_mask)])], 0)
-    )
+    s_inv = tf.linalg.diag(tf.concat([1.0 / s_mask, tf.zeros([tf.size(s) - tf.size(s_mask)])], 0))
 
     return tf.matmul(v, tf.matmul(s_inv, tf.transpose(u)))
 

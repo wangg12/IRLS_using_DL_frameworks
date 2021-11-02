@@ -11,8 +11,9 @@ import datetime
 # from numpy import linalg
 import os.path as osp
 import sys
+
 cur_dir = osp.dirname(osp.abspath(__file__))
-sys.path.insert(1, osp.join(cur_dir, '.'))
+sys.path.insert(1, osp.join(cur_dir, "."))
 from sklearn.datasets import load_svmlight_file
 from scipy.sparse import csr_matrix
 
@@ -61,6 +62,7 @@ y_test = np.where(y_test == -1, 0, 1)
 
 # NB: here X's shape is (N,d), which differs to the derivation
 
+
 def neg_log_likelihood(w, X, y, L2_param=None):
     """
     w: dx1
@@ -69,8 +71,9 @@ def neg_log_likelihood(w, X, y, L2_param=None):
     L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
     """
     # print(type(X), X.dtype)
-    res = tf.matmul(tf.matmul(tf.transpose(w), tf.transpose(X)), y.astype(np_dtype)) - \
-            tf.reduce_sum(tf.math.log(1 + tf.exp(tf.matmul(X, w))))
+    res = tf.matmul(tf.matmul(tf.transpose(w), tf.transpose(X)), y.astype(np_dtype)) - tf.reduce_sum(
+        tf.math.log(1 + tf.exp(tf.matmul(X, w)))
+    )
     if L2_param != None and L2_param > 0:
         res += -0.5 * L2_param * tf.matmul(tf.transpose(w), w)
     return -res[0][0]
@@ -97,16 +100,16 @@ def compute_acc(X, y, w):
 
 def update(w_old, X, y, L2_param=0):
     """
-  w_new = w_old - w_update
-  w_update = (X'RX+lambda*I)^(-1) (X'(mu-y) + lambda*w_old)
-  lambda is L2_param
+    w_new = w_old - w_update
+    w_update = (X'RX+lambda*I)^(-1) (X'(mu-y) + lambda*w_old)
+    lambda is L2_param
 
-  w_old: dx1
-  X: Nxd
-  y: Nx1
-  ---
-  w_update: dx1
-  """
+    w_old: dx1
+    X: Nxd
+    y: Nx1
+    ---
+    w_update: dx1
+    """
     d = X.shape[1]
     mu = tf.sigmoid(tf.matmul(X, w_old))  # Nx1
 
@@ -186,11 +189,33 @@ if __name__ == "__main__":
     train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=100)
 
     from sklearn.linear_model import LogisticRegression
+
     classifier = LogisticRegression()
-    classifier.fit(X_train, y_train.reshape(N_train,))
+    classifier.fit(
+        X_train,
+        y_train.reshape(
+            N_train,
+        ),
+    )
     y_pred_train = classifier.predict(X_train)
-    train_acc = np.sum(y_train.reshape(N_train,) == y_pred_train)/N_train
-    print('train_acc: {}'.format(train_acc))
+    train_acc = (
+        np.sum(
+            y_train.reshape(
+                N_train,
+            )
+            == y_pred_train
+        )
+        / N_train
+    )
+    print("train_acc: {}".format(train_acc))
     y_pred_test = classifier.predict(X_test)
-    test_acc = np.sum(y_test.reshape(N_test,) == y_pred_test)/N_test
-    print('test acc: {}'.format(test_acc))
+    test_acc = (
+        np.sum(
+            y_test.reshape(
+                N_test,
+            )
+            == y_pred_test
+        )
+        / N_test
+    )
+    print("test acc: {}".format(test_acc))

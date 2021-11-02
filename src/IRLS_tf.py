@@ -70,14 +70,12 @@ y_test = np.where(y_test == -1, 0, 1)
 
 def neg_log_likelihood(w, X, y, L2_param=None):
     """
-  w: dx1
-  X: Nxd
-  y: Nx1
-  L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
-  """
-    res = tf.matmul(tf.matmul(tf.transpose(w), tf.transpose(X)), y) - tf.reduce_sum(
-        tf.log(1 + tf.exp(tf.matmul(X, w)))
-    )
+    w: dx1
+    X: Nxd
+    y: Nx1
+    L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
+    """
+    res = tf.matmul(tf.matmul(tf.transpose(w), tf.transpose(X)), y) - tf.reduce_sum(tf.log(1 + tf.exp(tf.matmul(X, w))))
     if L2_param != None and L2_param > 0:
         res += -0.5 * L2_param * tf.matmul(tf.transpose(w), w)
     return -res[0][0]
@@ -85,10 +83,10 @@ def neg_log_likelihood(w, X, y, L2_param=None):
 
 def prob(X, w):
     """
-  X: Nxd
-  w: dx1
-  ---
-  prob: N x num_classes(2)"""
+    X: Nxd
+    w: dx1
+    ---
+    prob: N x num_classes(2)"""
     y = tf.constant(np.array([0.0, 1.0]), dtype=tf.float32)
     prob = tf.exp(tf.matmul(X, w) * y) / (1 + tf.exp(tf.matmul(X, w)))
     return prob
@@ -104,16 +102,16 @@ def compute_acc(X, y, w):
 
 def update(w_old, X, y, L2_param=0):
     """
-  w_new = w_old - w_update
-  w_update = (X'RX+lambda*I)^(-1) (X'(mu-y) + lambda*w_old)
-  lambda is L2_param
+    w_new = w_old - w_update
+    w_update = (X'RX+lambda*I)^(-1) (X'(mu-y) + lambda*w_old)
+    lambda is L2_param
 
-  w_old: dx1
-  X: Nxd
-  y: Nx1
-  ---
-  w_update: dx1
-  """
+    w_old: dx1
+    X: Nxd
+    y: Nx1
+    ---
+    w_update: dx1
+    """
     d = X.shape.as_list()[1]
     mu = tf.sigmoid(tf.matmul(X, w_old))  # Nx1
 
@@ -126,16 +124,12 @@ def update(w_old, X, y, L2_param=0):
     S = tf.expand_dims(S, 1)
 
     # calculate pseudo inverse via SVD
-    S_pinv = tf.where(
-        tf.not_equal(S, 0), 1 / S, tf.zeros_like(S)
-    )  # not good, will produce inf when divide by 0
+    S_pinv = tf.where(tf.not_equal(S, 0), 1 / S, tf.zeros_like(S))  # not good, will produce inf when divide by 0
     XRX_pinv = tf.matmul(V, S_pinv * tf.transpose(U))
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
     # w_new = tf.assign(w_old, w_old - tf.matmul(tf.matmul(XRX_pinv, tf.transpose(X)), mu - y))
-    w_update = tf.matmul(
-        XRX_pinv, tf.matmul(tf.transpose(X), mu - y) + L2_param * w_old
-    )
+    w_update = tf.matmul(XRX_pinv, tf.matmul(tf.transpose(X), mu - y) + L2_param * w_old)
     return w_update
 
 
@@ -144,15 +138,13 @@ def optimize(w_old, w_update):
     return w_old.assign(w_old - w_update)
 
 
-def train_IRLS(
-    X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER
-):
+def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER):
     """train Logistic Regression via IRLS algorithm
-  X: Nxd
-  y: Nx1
-  ---
+    X: Nxd
+    y: Nx1
+    ---
 
-  """
+    """
     N, d = X_train.shape
     X = tf.placeholder(dtype=tf.float32, shape=(None, 124), name="X")
     y = tf.placeholder(dtype=tf.float32, shape=(None, 1), name="y")
@@ -190,11 +182,7 @@ def train_IRLS(
     while i <= max_iter:
         print("iter: {}".format(i))
 
-        print(
-            "\t neg log likelihood: {}".format(
-                sess.run(neg_L, feed_dict=train_feed_dict)
-            )
-        )
+        print("\t neg log likelihood: {}".format(sess.run(neg_L, feed_dict=train_feed_dict)))
 
         train_acc, merged = sess.run([acc, merged_all], feed_dict=train_feed_dict)
         summary_writer.add_summary(merged, i)
