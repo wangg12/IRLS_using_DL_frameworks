@@ -1,4 +1,4 @@
-# IRLS in tensorflow2.0/pytorch
+# IRLS using DL frameworks
 * IRLS(Iterative re-weighted least square) for Logistic Regression, implemented using
   * tensorflow < 2.0
   * tensorflow2.0

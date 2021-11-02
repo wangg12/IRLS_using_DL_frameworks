@@ -4,8 +4,9 @@ from __future__ import print_function, division, absolute_import
 import os.path as osp
 import argparse
 import random
+from loguru import logger
 import numpy as np
-
+import time
 # from numpy import linalg
 import torch
 import torch.backends.cudnn as cudnn
@@ -162,6 +163,7 @@ def update_weight(w_old, X, y, L2_param=0):
     return w_new
 
 
+@logger.catch
 def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER):
     """train Logistic Regression via IRLS algorithm
     X: Nxd
@@ -178,6 +180,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
     w = torch.full((d, 1), 0.01, device=device)
 
     print("start training...")
+    tic = time.time()
     print("Device: {}".format(device))
     print("L2 param(lambda): {}".format(L2_param))
     i = 0
@@ -204,12 +207,10 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
         w_old_data = w.clone()
         w = update_weight(w, X_train, y_train, L2_param)
         i += 1
-    print("training done.")
+    print(f"training done, using {time.time() - tic}s.")
 
 
 if __name__ == "__main__":
-    # test_pinv()
-
     lambda_ = 20  # 0
     train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=100)
 

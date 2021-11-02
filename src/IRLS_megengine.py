@@ -4,14 +4,14 @@ import os.path as osp
 import random
 import numpy as np
 from loguru import logger
-
+import time
 # from numpy import linalg
 import megengine as mge
 import megengine.functional as F
 
 from sklearn.datasets import load_svmlight_file
 
-mge.core.set_option("async_level", 0)
+# mge.core.set_option("async_level", 0)
 
 cur_dir = osp.abspath(osp.dirname(__file__))
 path_train = osp.join(cur_dir, "../a9a/a9a")
@@ -172,6 +172,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
     w = F.full((d, 1), 0.01)
 
     print("start training...")
+    tic = time.time()
     print("Device: {}".format(device))
     print("L2 param(lambda): {}".format(L2_param))
     i = 0
@@ -198,7 +199,8 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
         w_old_data = F.copy(w)
         w = update_weight(w, X_train, y_train, L2_param)
         i += 1
-    print("training done.")
+    print(f"training done, using {time.time() - tic}s.")
+    # slower than pytorch
 
 
 if __name__ == "__main__":
