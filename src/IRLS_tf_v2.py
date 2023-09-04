@@ -6,6 +6,7 @@ import os
 import argparse
 import random
 import numpy as np
+import time
 import datetime
 
 # from numpy import linalg
@@ -150,6 +151,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     summary_writer = tf.summary.create_file_writer(f"./logs/{current_time}")
     print("start training...")
+    tic = time.time()
     print("L2 param(lambda): {}".format(L2_param))
     i = 0
     # iteration
@@ -180,7 +182,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
         w_update = update(w, X_train, y_train, L2_param)
         w = optimize(w, w_update)
         i += 1
-    print("training done.")
+    print(f"training done, using {time.time() - tic}s.")
 
 
 if __name__ == "__main__":
@@ -188,34 +190,34 @@ if __name__ == "__main__":
     lambda_ = 20  # 0
     train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=100)
 
-    from sklearn.linear_model import LogisticRegression
+    # from sklearn.linear_model import LogisticRegression
 
-    classifier = LogisticRegression()
-    classifier.fit(
-        X_train,
-        y_train.reshape(
-            N_train,
-        ),
-    )
-    y_pred_train = classifier.predict(X_train)
-    train_acc = (
-        np.sum(
-            y_train.reshape(
-                N_train,
-            )
-            == y_pred_train
-        )
-        / N_train
-    )
-    print("train_acc: {}".format(train_acc))
-    y_pred_test = classifier.predict(X_test)
-    test_acc = (
-        np.sum(
-            y_test.reshape(
-                N_test,
-            )
-            == y_pred_test
-        )
-        / N_test
-    )
-    print("test acc: {}".format(test_acc))
+    # classifier = LogisticRegression()
+    # classifier.fit(
+    #     X_train,
+    #     y_train.reshape(
+    #         N_train,
+    #     ),
+    # )
+    # y_pred_train = classifier.predict(X_train)
+    # train_acc = (
+    #     np.sum(
+    #         y_train.reshape(
+    #             N_train,
+    #         )
+    #         == y_pred_train
+    #     )
+    #     / N_train
+    # )
+    # print("train_acc: {}".format(train_acc))
+    # y_pred_test = classifier.predict(X_test)
+    # test_acc = (
+    #     np.sum(
+    #         y_test.reshape(
+    #             N_test,
+    #         )
+    #         == y_pred_test
+    #     )
+    #     / N_test
+    # )
+    # print("test acc: {}".format(test_acc))
