@@ -1,5 +1,6 @@
 # python 3
-# tensorflow 2.0
+# tensorflow 2
+# pip install tensorflow  # for both cpu and gpu
 from __future__ import print_function, division, absolute_import
 
 import os

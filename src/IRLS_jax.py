@@ -158,12 +158,12 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
 
     """
     N, d = X_train.shape
-    X_train = jnp.array(X_train)
-    X_test = jnp.array(X_test)
-    y_train = jnp.array(y_train)
-    y_test = jnp.array(y_test)
+    X_train = jax.device_put(jnp.array(X_train))
+    X_test = jax.device_put(jnp.array(X_test))
+    y_train = jax.device_put(jnp.array(y_train))
+    y_test = jax.device_put(jnp.array(y_test))
 
-    w = jnp.full((d, 1), 0.01, dtype="float32")
+    w = jax.device_put(jnp.full((d, 1), 0.01, dtype="float32"))
 
     print("start training...")
     tic = time.time()
@@ -200,7 +200,7 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
 if __name__ == "__main__":
     lambda_ = 20  # 0
     d = X_train.shape[1]
-    identity = jnp.identity(d, dtype="float32")
+    identity = jax.device_put(jnp.identity(d, dtype="float32"))
     train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=MAX_ITER, identity=identity)
 
     # from sklearn.linear_model import LogisticRegression
