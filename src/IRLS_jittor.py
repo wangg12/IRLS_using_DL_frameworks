@@ -7,6 +7,7 @@ import random
 from loguru import logger
 import numpy as np
 import time
+
 # from numpy import linalg
 import jittor as jt
 
@@ -145,7 +146,7 @@ def update_weight(w_old, X, y, L2_param=0):
     if L2_param > 0:
         val += L2_param * w_old
 
-    w_update = (XRX_pinv @ val)
+    w_update = XRX_pinv @ val
     w_new = w_old - w_update
     return w_new
 
@@ -195,7 +196,6 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
         i += 1
     jt.sync_all(True)
     print(f"training done, using {time.time() - tic}s.")
-
 
 
 if __name__ == "__main__":

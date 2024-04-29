@@ -1,19 +1,25 @@
 # python 3
 from __future__ import print_function, division, absolute_import
-from functools import partial
+
 import os.path as osp
 import argparse
 import random
 from loguru import logger
 import numpy as np
 import time
-import jax
-import jax.numpy as jnp
-from jax import lax
-from jax import grad, jit, vmap
+
+# from numpy import linalg
+import paddle
+
 
 from sklearn.datasets import load_svmlight_file
 from scipy.sparse import csr_matrix
+
+# from scipy.sparse import linalg
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 cur_dir = osp.dirname(osp.abspath(__file__))
 path_train = osp.join(cur_dir, "../a9a/a9a")
@@ -21,6 +27,7 @@ path_test = osp.join(cur_dir, "../a9a/a9a.t")
 MAX_ITER = 100
 np_dtype = np.float32
 
+paddle.device.set_device("gpu")
 
 # manual seed
 manualSeed = random.randint(1, 10000)  # fix seed
@@ -56,63 +63,49 @@ y_test = np.float32(np.where(y_test == -1, 0, 1))
 # NB: here X's shape is (N,d), which differs to the derivation
 
 
-@jit
-def neg_log_likelihood(w, X, y, L2_param):
+def neg_log_likelihood(w, X, y, L2_param=None):
     """
     w: dx1
     X: Nxd
     y: Nx1
     L2_param: \lambda>0, will introduce -\lambda/2 ||w||_2^2
     """
-    Xw = jnp.dot(X, w)
-    res = jnp.dot(Xw.transpose(), y) - jnp.log(1 + jnp.exp(Xw)).sum()
-    # if L2_param is not None and L2_param > 0:
-    #     res += -0.5 * L2_param * (jnp.dot(w.transpose(), w))
-    res += lax.cond(
-        L2_param is not None and L2_param > 0,
-        lambda a, b: -0.5 * a * jnp.dot(b.transpose(), b),
-        lambda a, b: 0.0 * a * jnp.dot(b.transpose(), b),
-        L2_param,
-        w,
-    )
+    Xw = X.mm(w)
+    res = paddle.mm(Xw.t(), y) - paddle.log(1 + Xw.exp()).sum()
+    if L2_param != None and L2_param > 0:
+        res += -0.5 * L2_param * paddle.mm(w.t(), w)
     return -res
 
 
-@jit
 def prob(X, w):
     """
     X: Nxd
     w: dx1
     ---
     prob: N x num_classes(2)"""
-    Xw = jnp.dot(X, w)
-    y = jnp.array([[0.0, 1.0]])  # 1x2
-    return jnp.exp(Xw * y) / (1 + jnp.exp(Xw))  # Nx2
+    Xw = X.mm(w)
+    y = paddle.to_tensor([[0.0, 1.0]])  # 1x2
+    return (Xw * y).exp() / (1 + Xw.exp())  # Nx2
 
 
-@jit
 def compute_acc(X, y, w):
     p = prob(X, w)
-    y_pred = jnp.argmax(p, 1)
-    return (y.flatten() == y_pred).astype("float32").mean()
+    y_pred = paddle.argmax(p, 1)
+    return (y.flatten() == y_pred).to("float32").mean()
 
 
-@jit
 def pinv_naive(A):
-    # dtype = A.dtype
-    U, S, Vh = jnp.linalg.svd(A, full_matrices=True)
-    threshold = jnp.max(S) * 1e-5
-    S_pinv = jnp.where(S > threshold, 1 / S, jnp.zeros_like(S))
-    # S_mask = S[S > threshold]
-    # S_pinv = jnp.concatenate([1.0 / S_mask, jnp.full([S.size - S_mask.size], 0.0, dtype=dtype)], 0)
-    # A_pinv = V @ S_pinv.diag() @ U.transpose()
-    A_pinv = jnp.dot(jnp.dot(Vh.transpose(), jnp.diag(S_pinv)), U.transpose())
+    dtype = A.dtype
+    U, S, Vh = paddle.linalg.svd(A, full_matrices=True)
+    threshold = paddle.max(S) * 1e-5
+    S_mask = S[S > threshold]
+    S_pinv = paddle.concat([1.0 / S_mask, paddle.full([S.numel() - S_mask.numel()], 0.0, dtype=dtype)], 0)
+    # A_pinv = V @ S_pinv.diag() @ U.t()
+    A_pinv = Vh.t() @ S_pinv.diag() @ U.t()
     return A_pinv
 
 
-# @partial(jit, static_argnums=(3,))
-@jit
-def update_weight(w_old, X, y, L2_param, identity):
+def update_weight(w_old, X, y, L2_param=0):
     """
     w_new = w_old - w_update
     w_update = (X'RX+lambda*I)^(-1) (X'(mu-y) + lambda*w_old)
@@ -124,40 +117,39 @@ def update_weight(w_old, X, y, L2_param, identity):
     ---
     w_new: dx1
     """
-    mu = jax.nn.sigmoid(jnp.dot(X, w_old))  # Nx1
+    mu = X.mm(w_old).sigmoid()  # Nx1
 
     R_flat = mu * (1 - mu)  # element-wise, Nx1
 
-    XRX = jnp.dot(X.transpose(), (R_flat * X))  # dxd
-    # if L2_param > 0:
-    XRX += L2_param * identity
+    XRX = paddle.mm(X.t(), R_flat.expand_as(X) * X)  # dxd
+    if L2_param > 0:
+        # XRX.diagonal().add_(L2_param)
+        for i in range(XRX.shape[0]):
+            XRX[i, i] += L2_param
 
-    # XRX += lax.cond(L2_param>0, lambda a, b: a * jnp.identity((b, b)), lambda a,b: jnp.zeros((b, b)), L2_param, XRX)
-    # np.save('XRX_pytorch.npy', XRX.cpu().numpy())
+    # np.save('XRX_paddle.npy', XRX.cpu().numpy())
 
     # Method 1: Calculate pseudo inverse via SVD
     # For singular matrices, we invert the singular
     # values above certain threshold (computed with the max singular value)
-    # this is slightly better than torch.pinverse when L2_param=0
+    # this is slightly better than paddle.linalg.pinv when L2_param=0
     XRX_pinv = pinv_naive(XRX)
 
     # method 2
-    # XRX_pinv = jnp.linalg.pinv(XRX)
+    # XRX_pinv = paddle.linalg.pinv(XRX)
 
     # w = w - (X^T R X)^(-1) X^T (mu-y)
-    val = jnp.dot(X.transpose(), (mu - y))
-    # if L2_param > 0:
-    #     val += L2_param * w_old
-    val += lax.cond(L2_param > 0, lambda a, b: a * b, lambda a, b: jnp.zeros_like(b), L2_param, w_old)
+    val = paddle.mm(X.t(), mu - y)
+    if L2_param > 0:
+        val += L2_param * w_old
 
-    w_update = jnp.dot(XRX_pinv, val)
+    w_update = paddle.mm(XRX_pinv, val)
     w_new = w_old - w_update
     return w_new
 
 
 @logger.catch
-# @partial(jit, static_argnums=(5,))
-def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER, identity=None):
+def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=MAX_ITER):
     """train Logistic Regression via IRLS algorithm
     X: Nxd
     y: Nx1
@@ -165,16 +157,16 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
 
     """
     N, d = X_train.shape
-    X_train = jax.device_put(jnp.array(X_train))
-    X_test = jax.device_put(jnp.array(X_test))
-    y_train = jax.device_put(jnp.array(y_train))
-    y_test = jax.device_put(jnp.array(y_test))
+    X_train = paddle.to_tensor(X_train)
+    X_test = paddle.to_tensor(X_test)
+    y_train = paddle.to_tensor(y_train)
+    y_test = paddle.to_tensor(y_test)
 
-    w = jax.device_put(jnp.full((d, 1), 0.01, dtype="float32"))
+    w = paddle.full((d, 1), 0.01)
 
     print("start training...")
     tic = time.time()
-    # print("Device: {}".format(device))
+    print("Device: {}".format(paddle.device.get_device()))
     print("L2 param(lambda): {}".format(L2_param))
     i = 0
     # iteration
@@ -188,27 +180,24 @@ def train_IRLS(X_train, y_train, X_test=None, y_test=None, L2_param=0, max_iter=
         test_acc = compute_acc(X_test, y_test, w)
         print("\t train acc: {}, test acc: {}".format(train_acc, test_acc))
 
-        L2_norm_w = jnp.linalg.norm(w)
+        L2_norm_w = paddle.norm(w)
         print("\t L2 norm of w: {}".format(L2_norm_w.item()))
 
         if i > 0:
-            diff_w = jnp.linalg.norm(w - w_old_data)
+            diff_w = paddle.norm(w - w_old_data)
             print("\t diff of w_old and w: {}".format(diff_w.item()))
             if diff_w < 1e-2:
                 break
 
-        w_old_data = jnp.array(w, copy=True)
-        w = update_weight(w, X_train, y_train, L2_param, identity)
+        w_old_data = w.clone()
+        w = update_weight(w, X_train, y_train, L2_param)
         i += 1
     print(f"training done, using {time.time() - tic}s.")
-    # still much slower than pytorch
 
 
 if __name__ == "__main__":
     lambda_ = 20  # 0
-    d = X_train.shape[1]
-    identity = jax.device_put(jnp.identity(d, dtype="float32"))
-    train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=MAX_ITER, identity=identity)
+    train_IRLS(X_train, y_train, X_test, y_test, L2_param=lambda_, max_iter=100)
 
     # from sklearn.linear_model import LogisticRegression
     # classifier = LogisticRegression()

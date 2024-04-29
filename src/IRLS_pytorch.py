@@ -7,6 +7,7 @@ import random
 from loguru import logger
 import numpy as np
 import time
+
 # from numpy import linalg
 import torch
 import torch.backends.cudnn as cudnn
@@ -88,7 +89,7 @@ def prob(X, w):
     ---
     prob: N x num_classes(2)"""
     Xw = X.mm(w)
-    y = torch.tensor([[0.0, 1.0]], device=device)  # 1x2
+    y = torch.as_tensor([[0.0, 1.0]], device=device)  # 1x2
     return (Xw * y).exp() / (1 + Xw.exp())  # Nx2
 
 
