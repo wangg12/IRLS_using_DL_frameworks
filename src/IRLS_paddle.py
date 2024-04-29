@@ -124,8 +124,9 @@ def update_weight(w_old, X, y, L2_param=0):
     XRX = paddle.mm(X.t(), R_flat.expand_as(X) * X)  # dxd
     if L2_param > 0:
         # XRX.diagonal().add_(L2_param)
-        for i in range(XRX.shape[0]):
-            XRX[i, i] += L2_param
+        # for i in range(XRX.shape[0]):
+        #     XRX[i, i] += L2_param
+        XRX += L2_param * paddle.eye(XRX.shape[0])
 
     # np.save('XRX_paddle.npy', XRX.cpu().numpy())
 

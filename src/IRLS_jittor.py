@@ -127,6 +127,8 @@ def update_weight(w_old, X, y, L2_param=0):
 
     XRX = X.t() @ (R_flat.expand_as(X) * X)  # dxd
     if L2_param > 0:
+        # for i in range(XRX.shape[0]):
+        #     XRX[i, i] += L2_param
         XRX += L2_param * jt.init.eye(XRX.shape[0])
     #    jt.misc.diag(XRX).add_(L2_param)
 

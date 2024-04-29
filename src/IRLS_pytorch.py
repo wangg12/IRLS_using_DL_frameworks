@@ -131,7 +131,8 @@ def update_weight(w_old, X, y, L2_param=0):
 
     XRX = torch.mm(X.t(), R_flat.expand_as(X) * X)  # dxd
     if L2_param > 0:
-        XRX.diagonal().add_(L2_param)
+        # XRX.diagonal().add_(L2_param)
+        XRX += L2_param * torch.eye(XRX.shape[0], device=device)
 
     # np.save('XRX_pytorch.npy', XRX.cpu().numpy())
 
