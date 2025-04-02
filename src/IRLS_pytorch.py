@@ -215,3 +215,46 @@ if __name__ == "__main__":
     # y_pred_test = classifier.predict(X_test)
     # test_acc = np.sum(y_test.reshape(N_test,) == y_pred_test)/N_test
     # print('test acc: {}'.format(test_acc))
+
+    # Device: cuda
+    # L2 param(lambda): 20
+    # iter: 0
+    #     neg log likelihood: 23909.580078125
+    #     train acc: 0.24080955982208252, test acc: 0.23622629046440125
+    #     L2 norm of w: 0.11135528236627579
+    # iter: 1
+    #     neg log likelihood: 12469.443359375
+    #     train acc: 0.8444765210151672, test acc: 0.8458325862884521
+    #     L2 norm of w: 2.162217617034912
+    #     diff of w_old and w: 2.1692135334014893
+    # iter: 2
+    #     neg log likelihood: 11109.1337890625
+    #     train acc: 0.8469641804695129, test acc: 0.8494564294815063
+    #     L2 norm of w: 3.1962287425994873
+    #     diff of w_old and w: 1.1507691144943237
+    # iter: 3
+    #     neg log likelihood: 10792.7197265625
+    #     train acc: 0.8475169539451599, test acc: 0.8501321077346802
+    #     L2 norm of w: 3.8568592071533203
+    #     diff of w_old and w: 0.8543345928192139
+    # iter: 4
+    #     neg log likelihood: 10746.015625
+    #     train acc: 0.8479469418525696, test acc: 0.8507463335990906
+    #     L2 norm of w: 4.1678619384765625
+    #     diff of w_old and w: 0.4917723834514618
+    # iter: 5
+    #     neg log likelihood: 10743.853515625
+    #     train acc: 0.8479162454605103, test acc: 0.8506848812103271
+    #     L2 norm of w: 4.240682601928711
+    #     diff of w_old and w: 0.1432085931301117
+    # iter: 6
+    #     neg log likelihood: 10743.8447265625
+    #     train acc: 0.8479162454605103, test acc: 0.8507463335990906
+    #     L2 norm of w: 4.244931221008301
+    #     diff of w_old and w: 0.010079198516905308
+    # iter: 7
+    #     neg log likelihood: 10743.845703125
+    #     train acc: 0.8479162454605103, test acc: 0.8507463335990906
+    #     L2 norm of w: 4.244947910308838
+    #     diff of w_old and w: 4.562574395094998e-05
+    # training done, using 0.14194560050964355s.

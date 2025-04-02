@@ -3,6 +3,7 @@
   * tensorflow < 2.0
   * tensorflow2.0
   * pytorch
+  * paddlepaddle
   * megengine
 
 * Note that IRLS is a second order optimization problem, which is equivalent to Newton's method.
